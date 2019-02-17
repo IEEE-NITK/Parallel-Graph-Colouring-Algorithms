@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
 
     cout << "Enter number of vertices : ";
     cin >> n;
-    cout << "Enter number of egdes : ";
+    cout << "Enter number of egdes    : ";
     cin >> m;;
 
     freopen(argv[1], "w", stdout);

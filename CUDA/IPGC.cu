@@ -8,7 +8,7 @@
  */
 
 // Include header files
-#include <iostream>
+#include <bits/stdc++.h>
 #include <cuda.h>
 
 #define MAX_THREADS 1024
@@ -17,69 +17,6 @@
 using namespace std;
 
 float device_time_taken;
-
-class Graph {
-
-public:
-
-	int nodeCount, edgeCount;
-	int maxDegree;
-	int *adjacencyList, *adjacencyListPointers;
-
-public:
-
-	int getNodeCount() {
-		return nodeCount;
-	}
-
-	int getEdgeCount() {
-		return edgeCount;
-	}
-
-	int getMaxDegree() {
-		return maxDegree;
-	}
-
-	void readGraph() {
-
-		int u, v;
-		cin >> nodeCount >> edgeCount;
-
-		// Use vector of vectors temporarily to input graph
-		vector<int> *adj = new vector<int>[nodeCount];
-		for (int i = 0; i < edgeCount; i++) {
-			cin >> u >> v;
-			adj[u].push_back(v);
-			adj[v].push_back(u);
-		}
-
-		// Copy into compressed adjacency List
-		adjacencyListPointers = new int[nodeCount +1];
-		adjacencyList = new int[2 * edgeCount +1];
-		int pos = 0;
-		for(int i=0; i<nodeCount; i++) {
-			adjacencyListPointers[i] = pos;
-			for(int node : adj[i])
-				adjacencyList[pos++] = node;
-		}
-		adjacencyListPointers[nodeCount] = pos;
-
-		// Calculate max degree
-		maxDegree = INT_MIN;
-		for(int i=0; i<nodeCount; i++)
-			maxDegree = max(maxDegree, (int)adj[i].size());
-
-		delete[] adj;
-	}
-
-	int *getAdjacencyList(int node) {
-		return adjacencyList;
-	}
-
-	int *getAdjacencyListPointers(int node) {
-		return adjacencyListPointers;
-	}
-};
 
 // Catch Cuda errors
 void catchCudaError(cudaError_t error, const char *function)
@@ -91,7 +28,42 @@ void catchCudaError(cudaError_t error, const char *function)
     }
 }
 
-__global__ void assignColoursKernel(Graph *graph, int nodeCount, 
+// Host Memory
+void readGraph(int &nodeCount, int &edgeCount,
+    int &maxDegree, int **adjacencyList, int **adjacencyListPointers) {
+
+    int u, v;
+    cin >> nodeCount >> edgeCount;
+
+    // Use vector of vectors temporarily to input graph
+    vector<int> *adj = new vector<int>[nodeCount];
+    for (int i = 0; i < edgeCount; i++) {
+        cin >> u >> v;
+        adj[u].push_back(v);
+        adj[v].push_back(u);
+    }
+
+    // Copy into compressed adjacency List
+    *adjacencyListPointers = new int[nodeCount +1];
+    *adjacencyList = new int[2 * edgeCount +1];
+    int pos = 0;
+    for(int i=0; i<nodeCount; i++) {
+        (*adjacencyListPointers)[i] = pos;
+        for(int node : adj[i])
+            (*adjacencyList)[pos++] = node;
+    }
+    (*adjacencyListPointers)[nodeCount] = pos;
+
+    // Calculate max degree
+    maxDegree = INT_MIN;
+    for(int i=0; i<nodeCount; i++)
+        maxDegree = max(maxDegree, (int)adj[i].size());
+
+    delete[] adj;
+}
+
+
+__global__ void assignColoursKernel(int nodeCount, int *adjacencyList, int *adjacencyListPointers,
     int *device_colours, bool *device_conflicts, int maxDegree) {
 
     int node = blockIdx.x * blockDim.x + threadIdx.x;
@@ -102,13 +74,13 @@ __global__ void assignColoursKernel(Graph *graph, int nodeCount,
     // Create forbidden array of size maxDegree
     int *forbidden = new int[CEIL(maxColours + 1, 32)];
     if(forbidden == NULL)  {
-        cout << "Cuda Memory Full\n";
+        printf("Cuda Memory Full\n");
         return;
     }
     memset(forbidden, 0, sizeof(int) * CEIL(maxColours + 1, 32));
 
-    for (int i = graph->adjacencyListPointers[node]; i < graph->adjacencyListPointers[node + 1]; i++) {
-        int neighbour = graph->adjacencyList[i];
+    for (int i = adjacencyListPointers[node]; i < adjacencyListPointers[node + 1]; i++) {
+        int neighbour = adjacencyList[i];
         int ind = device_colours[neighbour] % 32;
         forbidden[device_colours[neighbour] / 32] |= (1<<ind);
     }
@@ -124,15 +96,16 @@ __global__ void assignColoursKernel(Graph *graph, int nodeCount,
     delete[] forbidden;
 }
 
-void assignColours(Graph *graph, int nodeCount,
+void assignColours(int nodeCount, int *adjacencyList, int *adjacencyListPointers, 
     int *device_colours, bool *device_conflicts, int maxDegree){
 
     // Launch assignColoursKernel with nodeCount number of threads
-    assignColoursKernel<<<CEIL(nodeCount, MAX_THREAD_COUNT), MAX_THREAD_COUNT>>>(graph, nodeCount, device_colours, device_conflicts, maxDegree);
+    assignColoursKernel<<<CEIL(nodeCount, MAX_THREADS), MAX_THREADS>>>(nodeCount, adjacencyList, adjacencyListPointers, 
+        device_colours, device_conflicts, maxDegree);
     cudaDeviceSynchronize();
 }
 
-__global__ void detectConflictsKernel(Graph *graph, int nodeCount,
+__global__ void detectConflictsKernel(int nodeCount, int *adjacencyList, int *adjacencyListPointers,
     int *device_colours, bool *device_conflicts, bool *device_conflictExists) {
 
     int node = blockIdx.x * blockDim.x + threadIdx.x;
@@ -141,8 +114,8 @@ __global__ void detectConflictsKernel(Graph *graph, int nodeCount,
 
     device_conflicts[node] = false;
 
-    for (int i = graph->adjacencyListPointers[node]; i < graph->adjacencyListPointers[node + 1]; i++){
-        int neighbour = graph->adjacencyList[i];
+    for (int i = adjacencyListPointers[node]; i < adjacencyListPointers[node + 1]; i++){
+        int neighbour = adjacencyList[i];
         if (device_colours[neighbour] == device_colours[node] && neighbour < node) {
             //conflict
             device_conflicts[node] = true;
@@ -151,7 +124,7 @@ __global__ void detectConflictsKernel(Graph *graph, int nodeCount,
     }
 }
 
-bool detectConflicts(Graph *graph, int nodeCount,
+bool detectConflicts(int nodeCount, int *adjacencyList, int *adjacencyListPointers,
     int *device_colours, bool *device_conflicts) {
 
     bool *device_conflictExists;
@@ -161,7 +134,7 @@ bool detectConflicts(Graph *graph, int nodeCount,
     catchCudaError(cudaMemcpy(device_conflictExists, &conflictExists, sizeof(bool), cudaMemcpyHostToDevice), "Memcpy7");
 
     //Launch detectConflictsKernel with nodeCount number of threads
-    detectConflictsKernel<<<CEIL(nodeCount, MAX_THREAD_COUNT), MAX_THREAD_COUNT>>>(graph, nodeCount, device_colours, device_conflicts, device_conflictExists);
+    detectConflictsKernel<<<CEIL(nodeCount, MAX_THREADS), MAX_THREADS>>>(nodeCount, adjacencyList, adjacencyListPointers, device_colours, device_conflicts, device_conflictExists);
     cudaDeviceSynchronize();
 
     // Copy device_conflictExists to conflictExists and return
@@ -173,8 +146,8 @@ bool detectConflicts(Graph *graph, int nodeCount,
     return conflictExists;
 }
 
-int *graphColouring(Graph *graph, int nodeCount, int maxDegree)
-{
+int *graphColouring(int nodeCount, int *device_adjacencyList, int *device_adjacencyListPointers, 
+    int maxDegree) {
 
     // Boolean array for conflicts
     bool *host_conflicts = new bool[nodeCount];
@@ -199,14 +172,13 @@ int *graphColouring(Graph *graph, int nodeCount, int maxDegree)
     catchCudaError(cudaEventRecord(device_start), "Event Record");
 
     do {
-        assignColours(graph, nodeCount, device_colours, device_conflicts, maxDegree);
-    } while (detectConflicts(graph, nodeCount, device_colours, device_conflicts));
+        assignColours(nodeCount, device_adjacencyList, device_adjacencyListPointers, device_colours, device_conflicts, maxDegree);
+    } while (detectConflicts(nodeCount, device_adjacencyList, device_adjacencyListPointers, device_colours, device_conflicts));
 
     // Timer
     catchCudaError(cudaEventRecord(device_end), "Event Record");
     catchCudaError(cudaEventSynchronize(device_end), "Event Synchronize");
     catchCudaError(cudaEventElapsedTime(&device_time_taken, device_start, device_end), "Elapsed time");
-
 
     // Copy colours to host and return
     catchCudaError(cudaMemcpy(host_colours, device_colours, sizeof(int) * nodeCount, cudaMemcpyDeviceToHost), "Memcpy3");
@@ -225,41 +197,28 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    int nodeCount, edgeCount, maxDegree;
+    int *adjacencyList = NULL, *adjacencyListPointers = NULL;
+    int *device_adjacencyList, *device_adjacencyListPointers;
+
     char choice;
     cout << "Would you like to print the colouring of the graph? (y/n) ";
     cin >> choice;
 
     freopen(argv[1], "r", stdin);
+    readGraph(nodeCount, edgeCount, maxDegree, &adjacencyList, &adjacencyListPointers);
 
-    Graph *host_graph = new Graph();
-    Graph *device_graph;
-
-    catchCudaError(cudaMalloc((void **)&device_graph, sizeof(Graph)), "Malloc4");
-    host_graph->readGraph();
-
-    int nodeCount = host_graph->getNodeCount();
-    int edgeCount = host_graph->getEdgeCount();
-    int maxDegree = host_graph->getMaxDegree();
-    catchCudaError(cudaMemcpy(device_graph, host_graph, sizeof(Graph), cudaMemcpyHostToDevice), "Memcpy4");
-
-    // Copy Adjancency List to device
-    int *adjacencyList;
+    
     // Alocate device memory and copy
-    catchCudaError(cudaMalloc((void **)&adjacencyList, sizeof(int) * (2 * edgeCount + 1)), "Malloc5");
-    catchCudaError(cudaMemcpy(adjacencyList, host_graph->adjacencyList, sizeof(int) * (2 * edgeCount + 1), cudaMemcpyHostToDevice), "Memcpy");
-    // Update the pointer to this, in device_graph
-    catchCudaError(cudaMemcpy(&(device_graph->adjacencyList), &adjacencyList, sizeof(int *), cudaMemcpyHostToDevice), "Memcpy5");
+    catchCudaError(cudaMalloc((void **)&device_adjacencyList, sizeof(int) * (2 * edgeCount + 1)), "Malloc5");
+    catchCudaError(cudaMemcpy(device_adjacencyList, adjacencyList, sizeof(int) * (2 * edgeCount + 1), cudaMemcpyHostToDevice), "Memcpy11");
 
-    // Copy Adjancency List Pointers to device
-    int *adjacencyListPointers;
+
     // Alocate device memory and copy
-    catchCudaError(cudaMalloc((void **)&adjacencyListPointers, sizeof(int) * (nodeCount + 1)), "Malloc6");
-    catchCudaError(cudaMemcpy(adjacencyListPointers, host_graph->adjacencyListPointers, sizeof(int) * (nodeCount + 1), cudaMemcpyHostToDevice), "Memcpy");
-    // Update the pointer to this, in device_graph
-    catchCudaError(cudaMemcpy(&(device_graph->adjacencyListPointers), &adjacencyListPointers, sizeof(int *), cudaMemcpyHostToDevice), "Memcpy");
+    catchCudaError(cudaMalloc((void **)&device_adjacencyListPointers, sizeof(int) * (nodeCount + 1)), "Malloc6");
+    catchCudaError(cudaMemcpy(device_adjacencyListPointers, adjacencyListPointers, sizeof(int) * (nodeCount + 1), cudaMemcpyHostToDevice), "Memcpy12");
 
-
-    int *colouring = graphColouring(device_graph, nodeCount, maxDegree);
+    int *colouring = graphColouring(nodeCount, device_adjacencyList, device_adjacencyListPointers, maxDegree);
 
     int chromaticNumber = INT_MIN;
     for (int i = 0; i < nodeCount; i++) {
@@ -279,8 +238,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Free all memory
-    delete[] colouring;
-    catchCudaError(cudaFree(adjacencyList), "Free");
-    catchCudaError(cudaFree(adjacencyListPointers), "Free");
-    catchCudaError(cudaFree(device_graph), "Free");
+    delete[] colouring, adjacencyList, adjacencyListPointers;
+    catchCudaError(cudaFree(device_adjacencyList), "Free");
+    catchCudaError(cudaFree(device_adjacencyListPointers), "Free");
 }
