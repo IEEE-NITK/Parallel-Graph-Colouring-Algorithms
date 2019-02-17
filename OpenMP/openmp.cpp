@@ -99,8 +99,7 @@ void assign_initial_color(int &nov,vector<int> &remaining_vertices,vector<int> &
 
 int main(){
     int v,e;
-    v = 100;
-    e = 2506;
+    cin >> v >> e;
     int nov = v;
     vector<vector<int> > edges;
     for(int i=0;i<v;i++){
