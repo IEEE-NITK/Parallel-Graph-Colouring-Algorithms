@@ -1,9 +1,41 @@
 #include <iostream>
-#include "Graph.h"
-
+#include <bits/stdc++.h>
 using namespace std;
 
-void assignColours(Graph *graph, int nodeCount,
+void readGraph(int &nodeCount, int &edgeCount,
+    int &maxDegree, int **adjacencyList, int **adjacencyListPointers) {
+
+    int u, v;
+    cin >> nodeCount >> edgeCount;
+
+    // Use vector of vectors temporarily to input graph
+    vector<int> *adj = new vector<int>[nodeCount];
+    for (int i = 0; i < edgeCount; i++) {
+        cin >> u >> v;
+        adj[u].push_back(v);
+        adj[v].push_back(u);
+    }
+
+    // Copy into compressed adjacency List
+    *adjacencyListPointers = new int[nodeCount +1];
+    *adjacencyList = new int[2 * edgeCount +1];
+    int pos = 0;
+    for(int i=0; i<nodeCount; i++) {
+        (*adjacencyListPointers)[i] = pos;
+        for(int node : adj[i])
+            (*adjacencyList)[pos++] = node;
+    }
+    (*adjacencyListPointers)[nodeCount] = pos;
+
+    // Calculate max degree
+    maxDegree = INT_MIN;
+    for(int i=0; i<nodeCount; i++)
+        maxDegree = max(maxDegree, (int)adj[i].size());
+
+    delete[] adj;
+}
+
+void assignColours(int nodeCount, int *adjacencyList, int *adjacencyListPointers,
                    int *colours, bool *conflicts, int maxDegree)
 {
 
@@ -17,9 +49,9 @@ void assignColours(Graph *graph, int nodeCount,
         bool *forbidden = new bool[maxColours + 1];
         memset(forbidden, false, sizeof(bool) * (maxColours + 1));
 
-        for (int i = graph->adjacencyListPointers[node]; i < graph->adjacencyListPointers[node + 1]; i++)
+        for (int i = adjacencyListPointers[node]; i < adjacencyListPointers[node + 1]; i++)
         {
-            int neighbour = graph->adjacencyList[i];
+            int neighbour = adjacencyList[i];
             forbidden[colours[neighbour]] = true;
         }
 
@@ -36,7 +68,7 @@ void assignColours(Graph *graph, int nodeCount,
     }
 }
 
-bool detectConflicts(Graph *graph, int nodeCount, int *colours, bool *conflicts)
+bool detectConflicts(int nodeCount, int *adjacencyList, int *adjacencyListPointers, int *colours, bool *conflicts)
 {
 
     bool conflictExists = false;
@@ -48,9 +80,9 @@ bool detectConflicts(Graph *graph, int nodeCount, int *colours, bool *conflicts)
 
         conflicts[node] = false;
 
-        for (int i = graph->adjacencyListPointers[node]; i < graph->adjacencyListPointers[node + 1]; i++)
+        for (int i = adjacencyListPointers[node]; i < adjacencyListPointers[node + 1]; i++)
         {
-            int neighbour = graph->adjacencyList[i];
+            int neighbour = adjacencyList[i];
 
             if (colours[neighbour] == colours[node] && neighbour < node)
             {
@@ -63,7 +95,7 @@ bool detectConflicts(Graph *graph, int nodeCount, int *colours, bool *conflicts)
     return conflictExists;
 }
 
-int *graphColouring(Graph *graph, int nodeCount, int maxDegree)
+int *graphColouring(int nodeCount, int *adjacencyList, int *adjacencyListPointers, int maxDegree)
 {
 
     // Boolean array for conflicts
@@ -77,9 +109,9 @@ int *graphColouring(Graph *graph, int nodeCount, int maxDegree)
 
     do
     {
-        assignColours(graph, nodeCount, colours, conflicts, maxDegree);
+        assignColours(nodeCount, adjacencyList, adjacencyListPointers, colours, conflicts, maxDegree);
 
-    } while (detectConflicts(graph, nodeCount, colours, conflicts));
+    } while (detectConflicts(nodeCount, adjacencyList, adjacencyListPointers, colours, conflicts));
 
     delete[] conflicts;
 
@@ -101,17 +133,16 @@ int main(int argc, char *argv[])
 
     freopen(argv[1], "r", stdin);
 
-    Graph *graph = new Graph();
-    graph->readGraph();
+    int nodeCount, edgeCount, maxDegree;
+    int *adjacencyList = NULL, *adjacencyListPointers = NULL;
+    int *device_adjacencyList, *device_adjacencyListPointers;
 
-    int nodeCount = graph->getNodeCount();
-    int edgeCount = graph->getEdgeCount();
-    int maxDegree = graph->getMaxDegree();
+    readGraph(nodeCount, edgeCount, maxDegree, &adjacencyList, &adjacencyListPointers);
     
     clock_t start, end;
     start = clock();
 
-    int *colouring = graphColouring(graph, nodeCount, maxDegree);
+    int *colouring = graphColouring(nodeCount, adjacencyList, adjacencyListPointers, maxDegree);
 
     end = clock();
     float time_taken = 1000.0* (end - start)/CLOCKS_PER_SEC;
@@ -137,5 +168,4 @@ int main(int argc, char *argv[])
 
     // Free all memory
     delete[] colouring;
-    delete graph;
 }
