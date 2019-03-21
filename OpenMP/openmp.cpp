@@ -1,4 +1,5 @@
 #include <omp.h>
+#include <sys/time.h>
 #include <bits/stdc++.h>
 using namespace std;
 
@@ -45,7 +46,7 @@ void noNeighborColors(vector<vector<int> > &edges,vector<int> &remaining_vertice
 }
 /*Detect conflicts */
 void detectConflicts(vector<vector<int> > &edges,vector<int> &remaining_vertices, vector<int> &colors,int &nov,int v){
-    #pragma omp parallel for schedule(guided)
+    #pragma omp parallel for schedule(runtime)
     for(int i=0;i<nov;i++){
         int vert = remaining_vertices[i];
          int len = edges[vert].size();
@@ -88,7 +89,7 @@ int getNextCol(int vert ,vector< vector<int> > &edges,vector<int> &colors){
 
 /* Assign initial colors */
 void assign_initial_color(int &nov,vector<int> &remaining_vertices,vector<int> &colors,vector< vector<int> > &edges){
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(runtime)
     for(int ind = 0;ind < nov;ind++){
         int vert = remaining_vertices[ind];
         colors[vert] = getNextCol(vert,edges,colors);
@@ -99,7 +100,8 @@ void assign_initial_color(int &nov,vector<int> &remaining_vertices,vector<int> &
 
 int main(){
     int v,e;
-    cin >> v >> e;
+
+    cin>> v >> e;
     int nov = v;
     vector<vector<int> > edges;
     for(int i=0;i<v;i++){
@@ -107,9 +109,9 @@ int main(){
         edges.push_back(edge);
     }
     int u,u1;
-    char l;
+
     for(int i=0;i<e;i++){
-        cin>>l>>u>>u1;
+        cin>>u>>u1;
         edges[u].push_back(u1);
         edges[u1].push_back(u);
 
@@ -127,6 +129,13 @@ int main(){
     }
 
 	bool finish_color = false;
+    struct timeval startTime;
+	struct timeval endTime;
+	struct timezone startZone;
+	struct timezone endZone;
+	long startt,endt;
+	double overhead;
+    gettimeofday(&startTime,&startZone);
     while(!finish_color){
         assign_initial_color(nov,remaining_vertices,colors,edges);
         #pragma omp barrier
@@ -137,7 +146,14 @@ int main(){
         finish_color = finishColoring(colors,v);
         
     }
-    #pragma omp barrier
+
+    gettimeofday(&endTime,&endZone);
+    startt = startTime.tv_sec*1000000+startTime.tv_usec;
+	endt = endTime.tv_sec*1000000+endTime.tv_usec;
+    overhead = (endt-startt)/1000000.0;
+    cout<<"Time is :"<<overhead<<endl;
+    cout<<"Colors are"<<endl;
+    cout<<"v"<<v<<endl;
     for (int i = 0; i < v; i++) {
 		cout << "color " << i << ": " << colors[i] << endl;
 	}
