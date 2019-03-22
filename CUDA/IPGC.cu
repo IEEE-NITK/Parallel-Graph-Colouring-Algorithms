@@ -238,11 +238,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Check for correctness
-    //catchCudaError(cudaMemcpy(adjacencyList, device_adjacencyList, sizeof(int) * (2 * edgeCount + 1), cudaMemcpyDeviceToHost), "Memcpy13");
-    //catchCudaError(cudaMemcpy(adjacencyListPointers, device_adjacencyListPointers, sizeof(int) * (nodeCount + 1), cudaMemcpyDeviceToHost), "Memcpy13");
     int count = 0;
     for(int u = 0; u < nodeCount; u++){
-        //int j = adjacencyListPointers[u];
         for(int j = adjacencyListPointers[u]; j < adjacencyListPointers[u+1]; j++){
             int v = adjacencyList[j];
             if(colouring[u] == colouring[v] && u <= v ){
@@ -251,7 +248,6 @@ int main(int argc, char *argv[]) {
                 count++;
             }
         }
-        //cout<<i<<"\n";
     }
     cout << "Found total " << count << " conflicts!" << endl;
 

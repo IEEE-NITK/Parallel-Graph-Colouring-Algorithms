@@ -162,16 +162,16 @@ int *graphColouring(int nodeCount, int edgeCount, int *device_adjacencyList, int
     catchCudaError(cudaEventRecord(device_start), "Event Record");
 
     do {
-        assignColours <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList, device_adjacencyListPointers, 
-            device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
-        detectConflicts <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList, device_adjacencyListPointers, 
-            device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
+        assignColours <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList,
+            device_adjacencyListPointers, device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
+        detectConflicts <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList,
+            device_adjacencyListPointers, device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
         
         catchCudaError(cudaMemcpy(&done, device_coloured, sizeof(int), cudaMemcpyDeviceToHost), "Memcpy00");
     }while(done);
 
-    convertColour <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList, device_adjacencyListPointers, 
-        device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
+    convertColour <<< CEIL(max(nodeCount, edgeCount), MAX_THREADS), MAX_THREADS >>> (nodeCount, edgeCount, device_adjacencyList, 
+        device_adjacencyListPointers, device_edgeListX, device_edgeListY, device_coloured, device_CS, device_colours, device_VForbidden);
 
     cudaThreadSynchronize();
     // Timer
@@ -182,12 +182,12 @@ int *graphColouring(int nodeCount, int edgeCount, int *device_adjacencyList, int
     // Copy colours to host and return
     catchCudaError(cudaMemcpy(host_colours, device_colours, sizeof(int) * nodeCount, cudaMemcpyDeviceToHost), "Memcpy3");
 
-    // delete[] host_conflicts;
+    delete[] host_conflicts;
     catchCudaError(cudaFree(device_colours), "Free");
     catchCudaError(cudaFree(device_coloured), "Free");
     catchCudaError(cudaFree(device_CS), "Free");
     catchCudaError(cudaFree(device_VForbidden), "Free");
-    // catchCudaError(cudaFree(device_conflicts), "Free");
+    catchCudaError(cudaFree(device_conflicts), "Free");
 
     return host_colours;
 }
@@ -208,9 +208,7 @@ int main(int argc, char *argv[]) {
     cin >> choice;
 
     freopen(argv[1], "r", stdin);
-    readGraph(nodeCount, edgeCount, maxDegree, &adjacencyList, &adjacencyListPointers,
-        &edgeListX, &edgeListY);
-
+    readGraph(nodeCount, edgeCount, maxDegree, &adjacencyList, &adjacencyListPointers, &edgeListX, &edgeListY);
     
     // Alocate device memory and copy - Adjacency List
     catchCudaError(cudaMalloc((void **)&device_adjacencyList, sizeof(int) * (2 * edgeCount + 1)), "Malloc5");
@@ -231,6 +229,7 @@ int main(int argc, char *argv[]) {
     int *colouring = graphColouring(nodeCount, edgeCount, device_adjacencyList, device_adjacencyListPointers, 
         device_edgeListX, device_edgeListY, maxDegree);
 
+    // calculating number of colours
     int chromaticNumber = INT_MIN;
     for (int i = 0; i < nodeCount; i++) {
         chromaticNumber = max(chromaticNumber, colouring[i]);
@@ -251,7 +250,6 @@ int main(int argc, char *argv[]) {
     // Check for correctness
     int count = 0;
     for(int u = 0; u < nodeCount; u++){
-        //int j = adjacencyListPointers[u];
         for(int j = adjacencyListPointers[u]; j < adjacencyListPointers[u+1]; j++){
             int v = adjacencyList[j];
             if(colouring[u] == colouring[v] && u <= v ){
@@ -260,7 +258,6 @@ int main(int argc, char *argv[]) {
                 count++;
             }
         }
-        //cout<<i<<"\n";
     }
     cout << "Found total " << count << " conflicts!" << endl;
 
