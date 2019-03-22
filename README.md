@@ -22,7 +22,7 @@ Enter number of egdes    : 500
 
 ## Running the serial code
 
-Fire up the terminal and type in the following commands to run the serial graph coloring algorithm sample_graph.in
+Fire up the terminal and type in the following commands to run the serial graph coloring algorithm on sample_graph.in
 
 ```
 $ g++ serial.cpp -std=c++11 -o serial.out
