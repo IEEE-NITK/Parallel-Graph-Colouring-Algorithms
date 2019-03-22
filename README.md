@@ -31,7 +31,7 @@ $ ./serial.out sample_graph.in
 
 ## Analysis
 
-Following the comparison of serial, IPGC and EBGC algorithms.
+Following the comparison of serial, IPGC and EBGC algorithms. The input graphs analysed are generated from [random_graph_gen.cpp](./random_graph_gen.cpp). The number of edges is five times the number of nodes.
 
 ![Comparison of execution times](./Images/execution-time.png)
 
